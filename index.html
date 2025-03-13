@@ -1,1 +1,287 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plinko Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a1a, #2c2c2c);
+            font-family: 'Arial', sans-serif;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            height: 60vh;
+            min-height: 400px;
+            background: #1e2a44; /* Ciemne tło jak na obrazku */
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+
+        .ball {
+            position: absolute;
+            width: 10px; /* Mniejsza kulka */
+            height: 10px;
+            background: radial-gradient(circle, #ff4d4d, #cc0000);
+            border-radius: 50%;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #pins {
+            position: absolute;
+            width: 100%;
+            height: 80%;
+            top: 10%;
+        }
+
+        .pin {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #fff; /* Białe piny */
+            border-radius: 50%;
+        }
+
+        #slots {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 10%;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .slot {
+            flex: 1;
+            height: 100%;
+            color: #000; /* Czarny kolor napisów */
+            text-align: center;
+            line-height: calc(60vh * 0.10);
+            font-size: clamp(12px, 2vw, 16px);
+            font-weight: bold;
+        }
+
+        /* Kolory slotów jak na obrazku */
+        .slot:nth-child(1), .slot:nth-child(12) { background: #ff0000; } /* 16x - czerwony */
+        .slot:nth-child(2), .slot:nth-child(11) { background: #ff4500; } /* 9x - jasny czerwony */
+        .slot:nth-child(3), .slot:nth-child(10) { background: #ff8c00; } /* 2x - pomarańczowy */
+        .slot:nth-child(4), .slot:nth-child(9) { background: #ffa500; } /* 1.4x - ciemny pomarańczowy */
+        .slot:nth-child(5), .slot:nth-child(8) { background: #ffd700; } /* 1.2x - jasny żółty */
+        .slot:nth-child(6), .slot:nth-child(7) { background: #ffff00; } /* 0.5x - żółty */
+
+        #controls {
+            margin-top: 20px;
+            text-align: center;
+            color: #fff;
+        }
+
+        #budget {
+            font-size: clamp(16px, 3vw, 24px);
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .bet-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: clamp(12px, 2vw, 16px);
+            background: linear-gradient(to right, #007bff, #0056b3);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.3s;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+            background: linear-gradient(to right, #0056b3, #003d80);
+        }
+
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 600px) {
+            #game-container {
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="pins"></div>
+        <div id="slots">
+            <div class="slot">16x</div>
+            <div class="slot">9x</div>
+            <div class="slot">2x</div>
+            <div class="slot">1.4x</div>
+            <div class="slot">1.2x</div>
+            <div class="slot">0.5x</div>
+            <div class="slot">0.5x</div>
+            <div class="slot">1.2x</div>
+            <div class="slot">1.4x</div>
+            <div class="slot">2x</div>
+            <div class="slot">9x</div>
+            <div class="slot">16x</div>
+        </div>
+    </div>
+    <div id="controls">
+        <div id="budget">Budżet: 1000</div>
+        <div class="bet-buttons">
+            <button onclick="startGame(10)">10</button>
+            <button onclick="startGame(50)">50</button>
+            <button onclick="startGame(100)">100</button>
+            <button onclick="startGame(250)">250</button>
+            <button onclick="startGame(500)">500</button>
+        </div>
+    </div>
+
+    <script>
+        let budget = 1000;
+        const slotMultipliers = [16, 9, 2, 1.4, 1.2, 0.5, 0.5, 1.2, 1.4, 2, 9, 16];
+        const balls = [];
+        const GRAVITY = 0.25; // Przyspieszenie grawitacyjne
+        const FRICTION = 0.98; // Tłumienie prędkości
+
+        window.onload = function() {
+            createPins();
+            updateBudget();
+        };
+
+        function createPins() {
+            const pinsContainer = document.getElementById('pins');
+            const rows = 12; // Liczba rzędów jak na obrazku
+            const pinSpacing = window.innerWidth > 600 ? 50 : 40; // Szerzej rozstawione piny
+            const containerHeight = document.getElementById('game-container').offsetHeight;
+            const pinsHeight = containerHeight * 0.8; // 80% wysokości na piny
+            const rowSpacing = pinsHeight / rows;
+
+            for (let row = 0; row < rows; row++) {
+                const pinsInRow = row + 1; // Trójkątny układ
+                const rowWidth = pinsInRow * pinSpacing;
+                const offset = (document.getElementById('game-container').offsetWidth - rowWidth) / 2;
+
+                for (let col = 0; col < pinsInRow; col++) {
+                    const pin = document.createElement('div');
+                    pin.className = 'pin';
+                    pin.style.left = `${offset + col * pinSpacing}px`;
+                    pin.style.top = `${row * rowSpacing}px`;
+                    pinsContainer.appendChild(pin);
+                }
+            }
+        }
+
+        function updateBudget() {
+            document.getElementById('budget').textContent = `Budżet: ${budget.toFixed(2)}`;
+            const buttons = document.querySelectorAll('.bet-buttons button');
+            buttons.forEach(btn => {
+                const bet = parseInt(btn.textContent);
+                btn.disabled = budget < bet;
+            });
+        }
+
+        function startGame(bet) {
+            if (budget < bet) {
+                alert('Niewystarczający budżet!');
+                return;
+            }
+
+            budget -= bet;
+            updateBudget();
+
+            const ball = document.createElement('div');
+            ball.className = 'ball';
+            document.getElementById('game-container').appendChild(ball);
+
+            let posY = 0;
+            let posX = document.getElementById('game-container').offsetWidth / 2 - 5; // Mniejsza kulka
+            let velocityY = 1; // Początkowa prędkość w dół
+            let velocityX = 0;
+
+            const ballObj = { element: ball, interval: null };
+            balls.push(ballObj);
+
+            ballObj.interval = setInterval(() => {
+                // Grawitacja
+                velocityY += GRAVITY;
+                posY += velocityY;
+                velocityX *= FRICTION;
+                posX += velocityX;
+
+                // Ograniczenia boków
+                const containerWidth = document.getElementById('game-container').offsetWidth;
+                if (posX < 0) {
+                    posX = 0;
+                    velocityX = -velocityX * 0.8;
+                }
+                if (posX > containerWidth - 10) {
+                    posX = containerWidth - 10;
+                    velocityX = -velocityX * 0.8;
+                }
+
+                // Kolizja z pinami
+                const pins = document.getElementsByClassName('pin');
+                for (let pin of pins) {
+                    const pinX = parseFloat(pin.style.left);
+                    const pinY = parseFloat(pin.style.top);
+                    const dx = posX + 5 - (pinX + 4);
+                    const dy = posY + 5 - (pinY + 4);
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < 10) { // Promień kolizji
+                        // Losowe odbicie w lewo lub w prawo
+                        velocityX = Math.random() < 0.5 ? -3 : 3; // Losowo w lewo (-3) lub w prawo (3)
+                        velocityY = velocityY * 0.7 + GRAVITY;
+                        posX += velocityX;
+                        posY += velocityY;
+                    }
+                }
+
+                ball.style.top = `${posY}px`;
+                ball.style.left = `${posX}px`;
+
+                // Zakończenie, gdy kulka dotrze do slotów
+                const containerHeight = document.getElementById('game-container').offsetHeight;
+                if (posY >= containerHeight * 0.90 - 10) {
+                    clearInterval(ballObj.interval);
+                    const slotIndex = Math.floor((posX / containerWidth) * slotMultipliers.length);
+                    const multiplier = slotMultipliers[slotIndex];
+                    const winnings = bet * multiplier;
+                    budget += winnings;
+                    updateBudget();
+                    ball.remove();
+                    balls.splice(balls.indexOf(ballObj), 1);
+                    alert(`Wygrałeś: ${winnings.toFixed(2)} (mnożnik: ${multiplier}x)`);
+                }
+            }, 16); // 60 FPS
+        }
+    </script>
+</body>
+</html>
